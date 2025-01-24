@@ -57,6 +57,19 @@ parser IngressParser(packet_in        pkt,
     state parse_tcp_after_options {
         transition select(hdr.tcp.dst_port) {
             443: parse_tls;
+            8443: parse_tls;
+            10443: parse_tls;
+            3389: parse_tls; // rdp
+            993: parse_tls; // imap
+            995: parse_tls; // pop3
+            1194: parse_tls; // openvpn
+            465: parse_tls; // SMTP
+            587: parse_tls; // SMTP
+            989: parse_tls; // FTPS
+            990: parse_tls; // FTPS
+            1080: parse_tls; // SOCKS5
+            445: parse_tls; // SMB
+            3306: parse_tls; // MYSQL
             default: accept;
         }
     }
