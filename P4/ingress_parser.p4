@@ -20,11 +20,11 @@ parser IngressParser(packet_in        pkt,
     state parse_ethernet {
         pkt.extract(hdr.ethernet);
         transition select(hdr.ethernet.ether_type) {
-            ETHERTYPE_IPV4:  parse_ipv4;
-            default: accept;
-
+            ETHERTYPE_IPV4 : parse_ipv4;
+            default : accept;
         }
     }
+
 
     state parse_ipv4 {
         pkt.extract(hdr.ipv4);
@@ -34,6 +34,7 @@ parser IngressParser(packet_in        pkt,
             default : accept;
         }
     }
+
     
     state parse_tcp {
         pkt.extract(hdr.tcp);
@@ -49,28 +50,9 @@ parser IngressParser(packet_in        pkt,
         transition parse_tcp_after_options;
     }
 
-    // state parse_tcp_options {
-    //     pkt.extract(hdr.tcp_options, ((bit<32>)hdr.tcp.data_offset -5) * 32);
-    //     // transition parse_tcp_after_options;
-    //     transition accept;
-    // }
     state parse_tcp_after_options {
         transition select(hdr.tcp.dst_port) {
-            443: parse_tls;
-            8443: parse_tls;
-            10443: parse_tls;
-            3389: parse_tls; // rdp
-            993: parse_tls; // imap
-            995: parse_tls; // pop3
-            1194: parse_tls; // openvpn
-            465: parse_tls; // SMTP
-            587: parse_tls; // SMTP
-            989: parse_tls; // FTPS
-            990: parse_tls; // FTPS
-            1080: parse_tls; // SOCKS5
-            445: parse_tls; // SMB
-            3306: parse_tls; // MYSQL
-            default: accept;
+            default: parse_tls;
         }
     }
     
@@ -282,8 +264,15 @@ parser IngressParser(packet_in        pkt,
             0x0024: c36;
             0x0026: c38;
             0x0028: c40;
+            0x002a: c42;
+            0x002e: c46;
+            0x0034: c52;
+            0x0036: c54;
             0x0038: c56;
             0x003e: c62;
+            0x0046: c70;
+            0x0048: c72; //
+            0x0052: c82; //
             default: unparsed_cipher;
             // default: cipher_loop;
         }
@@ -357,19 +346,52 @@ parser IngressParser(packet_in        pkt,
         pkt.advance(288); transition parse_compressions; 
     }
     state c38 {
-        pkt.advance(304); transition parse_compressions; 
+        pkt.advance(304); transition parse_compressions;
     }
     state c40 {
-        pkt.advance(320); transition parse_compressions; 
+        pkt.advance(320); transition parse_compressions;
     }
+
+    state c42 {
+        pkt.advance(336); transition parse_compressions;
+    }
+
+    state c46 {
+        pkt.advance(368); transition parse_compressions;
+    }
+
+
+    state c52 {
+        pkt.advance(416); transition parse_compressions;
+    }
+
+
+    state c54 {
+        pkt.advance(432); transition parse_compressions;
+    }
+
     state c56 {
         counter.set((bit<8>)0x38); transition cipher_loop;
     }
     state c62 {
         counter.set((bit<8>)0x3e); transition cipher_loop;
     }
+
+    state c70 {
+        pkt.advance(560); transition parse_compressions;
+    }
+
+    state c72 {
+        pkt.advance(576); transition parse_compressions;
+    }
+
+    state c82 {
+        pkt.advance(656); transition parse_compressions;
+    }
+
     state cipher_loop {
         pkt.advance(16);
+//        pkt.extract(hdr.compressions2);
         counter.decrement(8w2);
         transition select(counter.is_zero()) {
             true: parse_compressions;
@@ -382,6 +404,7 @@ parser IngressParser(packet_in        pkt,
         pkt.extract(hdr.compressions);
         transition select (hdr.compressions.len) {
             0x01: c1_;
+            0x02: c2_;
             default: unparsed_compression;
         }
     }
@@ -395,6 +418,12 @@ parser IngressParser(packet_in        pkt,
         transition parse_extensions_len;
     }
 
+    state c2_ {
+        pkt.advance(16);
+        transition parse_extensions_len;
+    }
+
+
     state parse_extensions_len {
         pkt.extract(hdr.extensions_len);
         transition select(hdr.extensions_len.len) {
@@ -403,12 +432,6 @@ parser IngressParser(packet_in        pkt,
         }
     }
     state parse_extensions {
-        
-        // pkt.extract(hdr.extensions);
-        // transition select(hdr.extensions.type) {
-        //     0x0000: parse_server_name;
-        //     default: parse_skipped_extension_len;
-        // }
         bit<32> extension = pkt.lookahead<bit<32>>();
         transition select(extension[31:16]) {
             0x0000: parse_server_name;
@@ -463,11 +486,17 @@ parser IngressParser(packet_in        pkt,
             // 0x28: c40__;
             // 0x29: c41__;
             // 0x2a: c42__;
-            // 0x2b: c43__;
+             0x2b: c43__;
             // 0x2c: c44__;
             // 0x2d: c45__;
             // 0x2e: c46__;
             // 0x2f: c47__;
+             0x34: c52__;
+//             0xba: c186__;
+//             0xda: c218__;
+            // 0x011a: c282__;
+            // 0xfa: c250__;
+            //0x59: c89__;
             default: unparsed_extensions;
         }
 
@@ -496,7 +525,8 @@ parser IngressParser(packet_in        pkt,
     state c15__ {pkt.advance(152); transition parse_extensions;}
     state c16__ {pkt.advance(160); transition parse_extensions;}
     state c17__ {pkt.advance(136); transition parse_extensions;}
-    state c18__ {pkt.advance(144); transition parse_extensions;}
+    //state c18__ {pkt.advance(144); transition parse_extensions;}
+    state c18__ {pkt.advance(176); transition parse_extensions;}
     state c19__ {pkt.advance(152); transition parse_extensions;}
     state c20__ {pkt.advance(160); transition parse_extensions;}
     state c21__ {pkt.advance(168); transition parse_extensions;}
@@ -510,6 +540,8 @@ parser IngressParser(packet_in        pkt,
     state c29__ {pkt.advance(232); transition parse_extensions;}
     state c30__ {pkt.advance(240); transition parse_extensions;}
     state c31__ {pkt.advance(248); transition parse_extensions;}
+    state c43__ {pkt.advance(376); transition parse_extensions;} // + 32 len
+    state c52__ {pkt.advance(448); transition parse_extensions;} // + 32 len added header supported groups + len
     // state c32__ {pkt.advance(256); transition parse_extensions;}
     // state c33__ {pkt.advance(264); transition parse_extensions;}
     // state c34__ {pkt.advance(272); transition parse_extensions;}
@@ -521,11 +553,11 @@ parser IngressParser(packet_in        pkt,
     // state c40__ {pkt.advance(320); transition parse_extensions;}
     // state c41__ {pkt.advance(328); transition parse_extensions;}
     // state c42__ {pkt.advance(336); transition parse_extensions;}
-    // state c43__ {pkt.advance(344); transition parse_extensions;}
     // state c44__ {pkt.advance(352); transition parse_extensions;}
     // state c45__ {pkt.advance(360); transition parse_extensions;}
     // state c46__ {pkt.advance(368); transition parse_extensions;}
     // state c47__ {pkt.advance(376); transition parse_extensions;}
+ 
     state unparsed_extensions {
         meta.unparsed = EXT_LIM;
         transition accept;
